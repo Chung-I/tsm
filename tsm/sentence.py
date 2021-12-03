@@ -6,6 +6,9 @@ import zhon.hanzi
 import cn2an
 import opencc
 
+from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
+from 臺灣言語工具.基本物件.公用變數 import 標點符號
+
 converter = opencc.OpenCC('s2tw.json')
 
 
@@ -58,6 +61,20 @@ class Sentence:
             return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]|[^{zhon.hanzi.characters}\W]+", mixed_text)]
         else:
             return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]|[^{zhon.hanzi.characters}\W]+|\p{{P}}", mixed_text)]
+
+    @staticmethod
+    def parse_singhong_sent(sent):
+        taibun, tailo = map(lambda words: " ".join(words), zip(*[word.split('｜') for word in sent.split()]))
+        return 拆文分析器.建立句物件(taibun, tailo)
+
+    @staticmethod
+    def process_singhong_sent(sent_obj, output_type='char', remove_punct=True):
+        char_delimiter = ' ' if output_type == 'char' else ''
+        words = sent_obj.看型(物件分字符號=char_delimiter, 物件分詞符號=' ', 物件分句符號=' ').strip().split()
+        if remove_punct:
+            words = filter(lambda x: x not in 標點符號, words)
+        return " ".join(words)
+
 
 
 #class TaibunSentence(Sentence):
