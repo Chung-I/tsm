@@ -1,4 +1,4 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union, Tuple
 import json
 import unicodedata
 import regex as re
@@ -9,6 +9,7 @@ import opencc
 from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
 from 臺灣言語工具.基本物件.公用變數 import 標點符號
 from 臺灣言語工具.基本物件.句 import 句
+from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音 import 臺灣閩南語羅馬字拼音
 
 converter = opencc.OpenCC('s2tw.json')
 
@@ -64,9 +65,15 @@ class Sentence:
             return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]|[^{zhon.hanzi.characters}\W]+|\p{{P}}", mixed_text)]
 
     @staticmethod
-    def parse_singhong_sent(sent):
-        taibun, tailo = map(lambda words: " ".join(words), zip(*[word.split('｜') for word in sent.split()]))
-        return 拆文分析器.建立句物件(taibun, tailo)
+    def parse_singhong_sent(sent: Union[str, Tuple[str, str]], to_numbered_tone_mark=True):
+        if isinstance(sent, str):
+            taibun, tailo = map(lambda words: " ".join(words), zip(*[word.split('｜') for word in sent.split()]))
+        else:
+            taibun, tailo = sent
+        sent_obj = 拆文分析器.建立句物件(taibun, tailo)
+        if to_numbered_tone_mark:
+            sent_obj = sent_obj.轉音(臺灣閩南語羅馬字拼音, 函式="轉換到臺灣閩南語羅馬字拼音")
+        return sent_obj
 
     @staticmethod
     def process_singhong_sent(sent_obj, output_type='char', remove_punct=True):
@@ -77,11 +84,17 @@ class Sentence:
         return " ".join(words)
 
     @staticmethod
-    def get_grapheme_phoneme_pairs(sent_obj: 句, remove_punct=True):
+    def get_grapheme_phoneme_pairs(sent_obj: 句, remove_punct=True, remove_neutral_tone_mark=True):
         graphs = sent_obj.看型(物件分字符號=' ', 物件分詞符號=' ', 物件分句符號=' ').strip().split()
         phns = sent_obj.看音(物件分字符號=' ', 物件分詞符號=' ', 物件分句符號=' ').strip().split()
-        if remove_punct:
-            graphs, phns = zip(*filter(lambda pairs: all(map(lambda unit: unit not in 標點符號, pairs)), zip(graphs, phns)))
+        try:
+            if remove_punct:
+                graphs, phns = zip(*filter(lambda pairs: all(map(lambda unit: unit not in 標點符號, pairs)), zip(graphs, phns)))
+            if remove_neutral_tone_mark:
+                graphs, phns = zip(*map(lambda pairs: map(lambda unit: re.sub(r"--(\S+)", r"\1", unit), pairs), zip(graphs, phns)))
+        except ValueError as e:
+            print(f"get_grapheme_phoneme_pairs: ValueError from {graphs} {phns}", e)
+
         return " ".join(graphs), " ".join(phns)
 
 
