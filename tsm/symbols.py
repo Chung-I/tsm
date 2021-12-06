@@ -1,6 +1,6 @@
 from enum import Enum
-from itertools import product
-
+from itertools import product, chain
+from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音轉音值模組 import 臺灣閩南語羅馬字拼音對照音值韻母表, 臺灣閩南語羅馬字拼音對照音值聲母表
 臺灣閩南語羅馬字拼音聲母表 = {
     'p', 'ph', 'm', 'b',
     't', 'th', 'n', 'l',
@@ -66,52 +66,55 @@ class Stratum(Enum):
     俗 = 3
     替 = 4
 
-臺灣閩南語羅馬字拼音對照音值韻母表 = {
-    'a': 'a', 'aʔ': 'a ʔ', 'ap': 'a p', 'at': 'a t', 'ak': 'a k',
-    'am': 'a m', 'an': 'a n', 'aŋ': 'a ŋ',
-    'aⁿ': 'aⁿ', 'aⁿʔ': 'aⁿ ʔ',
-    'e': 'e', 'eh': 'e ʔ', 'enn': 'eⁿ', 'ennh': 'eⁿ ʔ',
-    'i': 'i', 'ih': 'i ʔ', 'ip': 'i p', 'it': 'i t', 'ik': 'i k',
-    'inn': 'iⁿ', 'innh': 'iⁿ ʔ',
-    'im': 'i m', 'in': 'i n', 'ing': 'i ŋ',
-    'o': 'ə', 'oh': 'ə ʔ',
-    'oo': 'o', 'ooh': 'o ʔ', 'op': 'o p', 'ok': 'o k',
-    'om': 'o m', 'ong': 'o ŋ',
-    'onn': 'oⁿ', 'onnh': 'oⁿ ʔ',
-    'oi': 'ə i', 'oih': 'ə i ʔ',  # ##
-    'u': 'u', 'uh': 'u ʔ', 'ut': 'u t', 'un': 'u n',
-    'ai': 'a i', 'aih': 'a i ʔ', 'ainn': 'aⁿ iⁿ', 'ainnh': 'aⁿ iⁿ ʔ',
-    'au': 'a u', 'auh': 'a u ʔ', 'aunn': 'aⁿ uⁿ', 'aunnh': 'aⁿ uⁿ ʔ',
-    'ia': 'i a', 'iah': 'i a ʔ', 'iap': 'i a p', 'iat': 'e t', 'iak': 'i a k',
-    'iam': 'i a m', 'ian': 'e n', 'iang': 'i a ŋ',
-    'iann': 'iⁿ aⁿ', 'iannh': 'iⁿ aⁿ ʔ',
-    'io': 'i ə', 'ioh': 'i ə ʔ', 'iok': 'i o k',
-    'iong': 'i o ŋ', 'ionn': 'iⁿ oⁿ',
-    'iu': 'i u', 'iuh': 'i u ʔ', 'iut': 'i u t',
-    'iunn': 'iⁿ uⁿ', 'iunnh': 'iⁿ uⁿ ʔ',
-    'ua': 'u a', 'uah': 'u a ʔ', 'uat': 'u a t', 'uak': 'u a k',
-    'uan': 'u a n', 'uann': 'uⁿ aⁿ', 'uannh': 'uⁿ aⁿ ʔ',
-    'ue': 'u e', 'ueh': 'u e ʔ',
-    'uenn': 'uⁿ eⁿ', 'uennh': 'uⁿ eⁿ ʔ',
-    'ui': 'u i', 'uih': 'u i ʔ',
-    'uinn': 'uⁿ iⁿ', 'uinnh': 'uⁿ iⁿ ʔ',
-    'iau': 'i a u', 'iauh': 'i a u ʔ',
-    'iaunn': 'iⁿ aⁿ uⁿ', 'iaunnh': 'iⁿ aⁿ uⁿ ʔ',
-    'uai': 'u a i', 'uaih': 'u a i ʔ',
-    'uainn': 'uⁿ aⁿ iⁿ', 'uainnh': 'uⁿ aⁿ iⁿ ʔ',
-    'm': 'm̩', 'mh': 'm̩ ʔ',
-    'ng': 'ŋ̩', 'ngh': 'ŋ̩ ʔ',
-    'ioo': 'i o', 'iooh': 'i o ʔ',
-    'er': 'ə', 'erh': 'ə ʔ',
-    'erm': 'ə m', 'ere': 'ə e', 'ereh': 'ə e ʔ',
-    'ee': 'ɛ', 'eeh': 'ɛ ʔ', 'eng': 'e ŋ', 'uee': 'u ee',
-    'ir': 'ɨ', 'irh': 'ɨ ʔ', 'irp': 'ɨ p', 'irt': 'ɨ t', 'irk': 'ɨ k',
-    'irm': 'ɨ m', 'irn': 'ɨ n', 'irng': 'ɨ ŋ',
-    'irinn': 'ɨⁿ iⁿ',
-    'ie': 'i e',
-    'or': 'ə', 'orh': 'ə ʔ', 'ior': 'i ə', 'iorh': 'i ə ʔ',
-    'uang': 'u a ŋ',
-}
+
+# 臺灣閩南語羅馬字拼音對照音值韻母表 = {
+#     'a': 'a', 'aʔ': 'a ʔ', 'ap': 'a p', 'at': 'a t', 'ak': 'a k',
+#     'am': 'a m', 'an': 'a n', 'aŋ': 'a ŋ',
+#     'aⁿ': 'aⁿ', 'aⁿʔ': 'aⁿ ʔ',
+#     'e': 'e', 'eh': 'e ʔ', 'enn': 'eⁿ', 'ennh': 'eⁿ ʔ',
+#     'i': 'i', 'ih': 'i ʔ', 'ip': 'i p', 'it': 'i t', 'ik': 'i k',
+#     'inn': 'iⁿ', 'innh': 'iⁿ ʔ',
+#     'im': 'i m', 'in': 'i n', 'ing': 'i ŋ',
+#     'o': 'ə', 'oh': 'ə ʔ',
+#     'oo': 'o', 'ooh': 'o ʔ', 'op': 'o p', 'ok': 'o k',
+#     'om': 'o m', 'ong': 'o ŋ',
+#     'onn': 'oⁿ', 'onnh': 'oⁿ ʔ',
+#     'oi': 'ə i', 'oih': 'ə i ʔ',  # ##
+#     'u': 'u', 'uh': 'u ʔ', 'ut': 'u t', 'un': 'u n',
+#     'ai': 'a i', 'aih': 'a i ʔ', 'ainn': 'aⁿ iⁿ', 'ainnh': 'aⁿ iⁿ ʔ',
+#     'au': 'a u', 'auh': 'a u ʔ', 'aunn': 'aⁿ uⁿ', 'aunnh': 'aⁿ uⁿ ʔ',
+#     'ia': 'i a', 'iah': 'i a ʔ', 'iap': 'i a p', 'iat': 'e t', 'iak': 'i a k',
+#     'iam': 'i a m', 'ian': 'e n', 'iang': 'i a ŋ',
+#     'iann': 'iⁿ aⁿ', 'iannh': 'iⁿ aⁿ ʔ',
+#     'io': 'i ə', 'ioh': 'i ə ʔ', 'iok': 'i o k',
+#     'iong': 'i o ŋ', 'ionn': 'iⁿ oⁿ',
+#     'iu': 'i u', 'iuh': 'i u ʔ', 'iut': 'i u t',
+#     'iunn': 'iⁿ uⁿ', 'iunnh': 'iⁿ uⁿ ʔ',
+#     'ua': 'u a', 'uah': 'u a ʔ', 'uat': 'u a t', 'uak': 'u a k',
+#     'uan': 'u a n', 'uann': 'uⁿ aⁿ', 'uannh': 'uⁿ aⁿ ʔ',
+#     'ue': 'u e', 'ueh': 'u e ʔ',
+#     'uenn': 'uⁿ eⁿ', 'uennh': 'uⁿ eⁿ ʔ',
+#     'ui': 'u i', 'uih': 'u i ʔ',
+#     'uinn': 'uⁿ iⁿ', 'uinnh': 'uⁿ iⁿ ʔ',
+#     'iau': 'i a u', 'iauh': 'i a u ʔ',
+#     'iaunn': 'iⁿ aⁿ uⁿ', 'iaunnh': 'iⁿ aⁿ uⁿ ʔ',
+#     'uai': 'u a i', 'uaih': 'u a i ʔ',
+#     'uainn': 'uⁿ aⁿ iⁿ', 'uainnh': 'uⁿ aⁿ iⁿ ʔ',
+#     'm': 'm̩', 'mh': 'm̩ ʔ',
+#     'ng': 'ŋ̩', 'ngh': 'ŋ̩ ʔ',
+#     'ioo': 'i o', 'iooh': 'i o ʔ',
+#     'er': 'ə', 'erh': 'ə ʔ',
+#     'erm': 'ə m', 'ere': 'ə e', 'ereh': 'ə e ʔ',
+#     'ee': 'ɛ', 'eeh': 'ɛ ʔ', 'eng': 'e ŋ', 'uee': 'u ee',
+#     'ir': 'ɨ', 'irh': 'ɨ ʔ', 'irp': 'ɨ p', 'irt': 'ɨ t', 'irk': 'ɨ k',
+#     'irm': 'ɨ m', 'irn': 'ɨ n', 'irng': 'ɨ ŋ',
+#     'irinn': 'ɨⁿ iⁿ',
+#     'ie': 'i e',
+#     'or': 'ə', 'orh': 'ə ʔ', 'ior': 'i ə', 'iorh': 'i ə ʔ',
+#     'uang': 'u a ŋ',
+# }
+
+IPA_TO_TLPA = {value: key for key, value in chain(臺灣閩南語羅馬字拼音對照音值韻母表.items(), 臺灣閩南語羅馬字拼音對照音值聲母表.items())}
 
 TSM_IPA_RHYME_TO_PHONE = {'a': 'a', 'aʔ': 'a ʔ', 'ap': 'a p', 'at': 'a t', 'ak': 'a k',
     'am': 'a m', 'an': 'a n', 'aŋ': 'a ŋ', 'aⁿ': 'aⁿ', 'aⁿʔ': 'aⁿ ʔ',
@@ -167,7 +170,7 @@ TSM_IPA_TO_ARPABET = {
     'b': 'B', 'oⁿ': 'AO NN', 's': 'S', 'ŋ̩': 'NG', 'dz': 'DZ', 'k': 'KK', 'n': 'N', 'a': 'AA', 'l': 'L', 'iⁿ': 'IY NN',
     'ɨⁿ': 'IH NN', 'ɛ': 'EH', 'u': 'UW', 'i': 'IY', 'o': 'AO', 't': 'TT', 'tsʰ': 'TSH', 'ə': 'AX', 'ŋ': 'NG', 'g': 'G',
     'ʔ': 'Q', 'eⁿ': 'EH NN', 'ɨ': 'IH', 'uⁿ': 'UW NN', 'aⁿ': 'AA NN', 'p': 'PP', 'm̩': 'M', 'm': 'M', 'kʰ': 'KKH',
-    'ts': 'TS', 'tʰ': 'TTH', 'h': 'HH', 'pʰ': 'PPH', 'e': 'EH', 'ee': 'EH', 
+    'ts': 'TS', 'tʰ': 'TTH', 'h': 'HH', 'pʰ': 'PPH', 'e': 'EH', 'ee': 'EH'
 }
 
 TSM_TLPA_TO_ARPABET = {

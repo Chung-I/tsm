@@ -51,7 +51,7 @@ class Sentence:
 
     @staticmethod
     def cut(sent):
-        if "ckip" not in Sentenceword_segmenter_cache:
+        if "ckip" not in Sentence.word_segmenter_cache:
             from tsm.ckip_wrapper import CKIPWordSegWrapper
             Sentence.word_segmenter_cache["ckip"] = CKIPWordSegWrapper('/home/nlpmaster/ssd-1t/weights/data')
         sent = re.sub("\s+", "", sent)
