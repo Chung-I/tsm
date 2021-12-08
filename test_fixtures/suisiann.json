@@ -1,0 +1,42 @@
+[
+    {
+        "taibun": "佗一條路是著的？",
+        "tailo": "Tó tsi̍t tiâu lōo sī tio̍h--ê?",
+        "tgt_tree": "(TOP (IP (NP (DP (DT 哪) (QP (CD 一) (CLP (M 條)))) (NP (NN 路))) (VP (VC 是) (NP (CP (CP (IP (VP (VA 對))) (DEC 的)))))))",
+        "alignment": [
+            [0, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [4, 4],
+            [5, 5],
+            [6, 6]
+        ],
+        "written_pronunciation": "to2 tsit8 tiau5 loo7 si7 tioh8 e5",
+        "sandhi_domain_start_ends": [[0, 4], [4, 7]],
+        "actual_pronunciation": "to1 tsit10 tiau7 loo7 si3 tioh10 e7"
+    },
+    {
+        "taibun": "到厝了後愛會記得用Line敲予我。",
+        "tailo": "Kàu tshù liáu-āu ài ē-kì-tit iōng Line khà hōo--guá.",
+        "tgt_tree": "(TOP (IP (VP (LCP (IP (VP (VV 到) (NP (NN 家)))) (LC 之後)) (VP (VV 要) (VP (VV 記得)(VP (PP (P 用) (NP (NN Line))) (VP (VV 打) (PP (VV 給) (NP (PN 我))))))))))",
+        "alignment": [
+            [0, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [4, 4],
+            [5, 5],
+            [6, 5],
+            [7, 6],
+            [8, 7],
+            [9, 8],
+            [10, 9],
+            [11, 10],
+            [12, 11]
+        ],
+        "written_pronunciation": "kau3 tshu3 liau2 au7 ai3 e7 ki3 tit4 iong7 Line kha3 hoo7 gua2",
+        "sandhi_domain_start_ends": [[0, 2], [2, 4], [4, 10], [10, 13]],
+        "actual_pronunciation": "kau2 tshu3 liau1 au7 ai2 e3 ki2 tit8 iong3 Line kha2 hoo7 gua7"
+    }
+]

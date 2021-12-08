@@ -6,5 +6,4 @@ numpy
 scipy
 ckiptagger
 opencc
-docker
 tai5-uan5_gian5-gi2_kang1-ku7
