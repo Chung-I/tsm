@@ -3,7 +3,7 @@ from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音 im
 from tsm.symbols import TSM_IPA_RHYME_TO_PHONE, IPA_TO_TLPA
 from 臺灣言語工具.基本物件.公用變數 import 分字符號, 分詞符號, 標點符號
 
-def 台灣話口語講法(句物件, apply_tone_sandhi=True, to_phn=True, to_TLPA=False, phn_delimiter=' '):
+def 台灣話口語講法(句物件, apply_tone_sandhi=True, to_phn=True, to_TLPA=False, phn_delimiter=' ', add_circumfix_for_non_taigi_words=True):
     if to_phn and to_TLPA:
         raise NotImplementedError('to_phn and to_TLPA cannot be True at the same time')
 
@@ -18,7 +18,9 @@ def 台灣話口語講法(句物件, apply_tone_sandhi=True, to_phn=True, to_TLP
                 pass
             else:
                 if 字物件.音 == (None,):
-                    音 = f"##PUNCT{原底字.音}##PUNCT" if 原底字.音 in 標點符號 else f"##OOL{原底字.音}##OOL"
+                    音 = 原底字.音
+                    if add_circumfix_for_non_taigi_words:
+                        音 = f"##PUNCT{原底字.音}##PUNCT" if 原底字.音 in 標點符號 else f"##OOL{原底字.音}##OOL"
                     新陣列.append(原底字.__class__(原底字.型, 音, 原底字.輕聲標記)) # OOL = Out-of-Lexicon
                 else:
                     initial, rhyme, tone = 變調方式.變調(字物件.音) if apply_tone_sandhi else 字物件.音

@@ -1,4 +1,3 @@
-
 from typing import List, Dict, Tuple
 from nltk import tree
 from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
@@ -7,6 +6,8 @@ from tsm.tone_sandhi import 台灣話口語講法
 import requests
 from nltk.tree import Tree, ParentedTree
 import logging
+from collections import defaultdict
+from itertools import groupby, accumulate
 
 from tsm.sentence import Sentence
 from tsm.clients import MosesClient
@@ -16,6 +17,9 @@ LEXICAL_POS = {
     'N', 'V', 'A', 'P'
 }
 
+NEVER_GOVERNED = {
+    'CP'
+}
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +51,19 @@ def infer_sandhi_boundary(root: ParentedTree, phrase_is_lexically_governed) -> L
     boundaries = []
     for pos in treepositions:
         if not isinstance(root[pos], Tree):
-            if pos in boundary_positions:
-                if root[pos] == "的" and root[pos[:-1]].label() == "DEC":
-                    boundaries[-1] = False
-                    boundaries.append(False)
-                else:
-                    boundaries.append(True)
-            else:
+            if root[pos] == "的" and root[pos[:-1]].label() == "DEC":
+                boundaries[-1] = True
                 boundaries.append(False)
+            else:
+                boundaries.append(pos in boundary_positions)
 
     return boundaries
+
+def set_governed(root: ParentedTree, sibling_pos: Tuple[int], phrase_is_lexically_governed: Dict[Tuple[int], bool]) -> None:
+    phrase_is_lexically_governed[sibling_pos] = True
+    for child in root[sibling_pos]:
+        if isinstance(child, Tree) and child.label() not in NEVER_GOVERNED:
+            set_governed(root, child.treeposition(), phrase_is_lexically_governed)
 
 def lexical_government(root: ParentedTree) -> Dict[Tuple[int], bool]:
     "Determine if phrase_a is phrase_b's lexical head"
@@ -65,18 +72,27 @@ def lexical_government(root: ParentedTree) -> Dict[Tuple[int], bool]:
         if not isinstance(root[pos], Tree): # skip root and leaves
             logger.info(f"{lexify(root[pos])} is terminal; skipping")
             continue
+
         if root[pos].parent() is None:
             logger.info(f"{lexify(root[pos])} is root; skipping")
             continue
-        if (cur_label_prefix := root[pos].label()[0]) not in LEXICAL_POS: # skip non-lexical head
+
+        cur_label = root[pos].label()
+        cur_label_prefix = cur_label[0]
+        if cur_label_prefix not in LEXICAL_POS: # skip non-lexical head
             logger.info(f"{lexify(root[pos])} is not lexical; skipping")
             continue
+
+        if cur_label.endswith('P'):
+            logger.info(f"{lexify(root[pos])} is a phrase; skipping")
+            continue
+
         parent_label = root[pos].parent().label()
         if parent_label.startswith(cur_label_prefix) and cur_label_prefix in LEXICAL_POS: # subt is the lexical head of the parent phrase
             parent_index = root[pos].parent_index()
             for sibling_index in filter(lambda idx: idx != parent_index, range(0, len(root[pos].parent()))):
                 sibling_pos = pos[:-1] + (sibling_index,)
-                phrase_is_lexically_governed[sibling_pos] = True
+                set_governed(root, sibling_pos, phrase_is_lexically_governed)
                 logger.info(f"{lexify(root[pos])} lexically governs {lexify(root[sibling_pos])}")
 
     return phrase_is_lexically_governed
@@ -114,30 +130,61 @@ def get_character_level_sandhi_start_and_ends(words, word_sandhi_boundaries) -> 
         char_sandhi_start_and_ends.append((char_start, char_end))
     return char_sandhi_start_and_ends
 
-def get_character_level_sandhi_start_and_ends_from_tree(
+def alignment_to_tgt2src(alignment: List[Tuple[int, int]]) -> List[Dict[int, List[int]]]:
+    """
+    paired alignment to target to source token mapping.
+    """
+    tgt2src = defaultdict(list)
+    for src_idx, tgt_idxs in alignment:
+        tgt2src[tgt_idxs].append(src_idx)
+    return tgt2src
+
+def cumsum(lst):
+    return list(accumulate(lst))
+
+def cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(
+    src_char_len: int, tgt_words: List[str], tgt_to_src: Dict[int, List[int]], tgt_sandhi_boundaries: List[bool],
+) -> Tuple[List[int], List[bool]]:
+    src_char_sandhi_boundaries: List[bool] = [False] * src_char_len
+    tgt_char_start_and_ends: List[Tuple[int, int]] = word_lengths_to_char_start_and_ends(map(lambda word: len(Sentence.parse_mixed_text(word)), tgt_words))
+    tgt_word_indices_for_src_chars: List[int] = [-1] * src_char_len
+    for word_idx, (start, end) in enumerate(tgt_char_start_and_ends):
+        max_src_char_idx = -1
+        for tgt_char_idx in range(start, end):
+            for src_char_idx in tgt_to_src[tgt_char_idx]:
+                max_src_char_idx = max(max_src_char_idx, src_char_idx)
+                tgt_word_indices_for_src_chars[src_char_idx] = word_idx
+        src_char_sandhi_boundaries[max_src_char_idx] = tgt_sandhi_boundaries[word_idx]
+
+    src_word_lengths = [len(list(values)) for _, values in groupby(tgt_word_indices_for_src_chars)]
+    src_sandhi_boundaries = [src_char_sandhi_boundaries[idx-1] for idx in cumsum(src_word_lengths)]
+
+    return src_word_lengths, src_sandhi_boundaries
+
+def get_src_sandhi_start_and_ends(
     tgt_tree: ParentedTree,
     src_tokens: List[str],
-    tgt_to_src: Dict[int, int]
+    tgt_to_src: Dict[int, List[int]],
 ) -> List[Tuple[int, int]]:
+    logger.info(tgt_tree.pformat())
     phrase_is_lexically_governed = lexical_government(tgt_tree)
     tgt_sandhi_boundaries = infer_sandhi_boundary(tgt_tree, phrase_is_lexically_governed)
-    tgt_char_sandhi_start_and_ends = get_character_level_sandhi_start_and_ends(tgt_tree.leaves(), tgt_sandhi_boundaries)
-    src_char_sandhi_boundaries = [False for _ in src_tokens]
-    for tgt_start, tgt_end in tgt_char_sandhi_start_and_ends:
-        src_end = tgt_to_src[tgt_end-1]
-        src_char_sandhi_boundaries[src_end] = True
-    src_char_sandhi_start_and_ends = phrase_boundary_to_start_and_ends(src_char_sandhi_boundaries)
-    return src_char_sandhi_start_and_ends
+    src_word_lengths, src_sandhi_boundaries = \
+        cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(len(src_tokens), tgt_tree.leaves(), tgt_to_src, tgt_sandhi_boundaries)
+    return src_word_lengths, src_sandhi_boundaries
 
-def infer_pron(chars: List[str], phns: List[str], src_char_sandhi_start_and_ends: List[Tuple[int, int]]) -> List[str]:
-    char_phn_pairs = list(zip(chars, phns))
-    chunks = []
-    for start, end in src_char_sandhi_start_and_ends:
-        chunk_chars, chunk_phns = zip(*char_phn_pairs[start:end])
-        chunk = 拆文分析器.建立句物件(" ".join(chunk_chars), " ".join(chunk_phns))
-        tone_sandhi_chunk = 台灣話口語講法(chunk, to_phn=False, to_TLPA=True, phn_delimiter="")
-        chunks.append(tone_sandhi_chunk.看音(物件分字符號=' ', 物件分詞符號=' ', 物件分句符號=' '))
-    return chunks
+def sandhi_mark(is_boundary: bool):
+    return " #" if is_boundary else ""
+
+def infer_pron(chars: List[str], phns: List[str], src_word_lengths: List[int], src_sandhi_boundaries: List[bool]) -> List[str]:
+    start_and_ends = word_lengths_to_char_start_and_ends(src_word_lengths)
+    words = ["-".join(chars[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
+    word_phns = ["-".join(phns[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
+    logger.info(f"grapheme phoneme pairs sent to singhong system: {' '.join(words)}, {' '.join(word_phns)}")
+    sent = 拆文分析器.建立句物件(" ".join(words), " ".join(word_phns))
+    tone_sandhi_sent = 台灣話口語講法(sent, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
+    sent_text = tone_sandhi_sent.看音(" ", " ", " ")
+    return sent_text.split()
 
 def g2p(sent, parser_url, g2p_client):
     chars = Sentence.parse_mixed_text(sent)
@@ -145,14 +192,11 @@ def g2p(sent, parser_url, g2p_client):
     obj = res.json()
     tgt_tree = ParentedTree.fromstring(obj['tree'])
     alignment = obj['alignment']
-    src_to_tgt = {src: tgt for src, tgt in alignment}
-    tgt_to_src = {tgt: src for src, tgt in alignment}
+    tgt_to_src = alignment_to_tgt2src(alignment)
     src_tokens = obj["source"].split()
-    tgt_tokens = obj["target"].split()
-    align_info = " ".join(f"{src_tokens[align[0]]}-{tgt_tokens[align[1]]}" for align in alignment)
-    src_char_sandhi_start_and_ends = get_character_level_sandhi_start_and_ends_from_tree(tgt_tree, src_tokens, tgt_to_src)
+    src_word_lengths, src_sandhi_boundaries = get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
     phns = g2p_client.translate(sent).split()
-    pron_as_phns = infer_pron(chars, phns, src_char_sandhi_start_and_ends)
+    pron_as_phns = infer_pron(chars, phns, src_word_lengths, src_sandhi_boundaries)
     return " ".join(pron_as_phns)
 
 

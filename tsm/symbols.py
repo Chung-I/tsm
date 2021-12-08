@@ -1,6 +1,6 @@
 from enum import Enum
 from itertools import product, chain
-from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音轉音值模組 import 臺灣閩南語羅馬字拼音對照音值韻母表, 臺灣閩南語羅馬字拼音對照音值聲母表
+from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音轉音值模組 import 臺灣閩南語羅馬字拼音對照音值聲母表
 臺灣閩南語羅馬字拼音聲母表 = {
     'p', 'ph', 'm', 'b',
     't', 'th', 'n', 'l',
@@ -113,6 +113,51 @@ class Stratum(Enum):
 #     'or': 'ə', 'orh': 'ə ʔ', 'ior': 'i ə', 'iorh': 'i ə ʔ',
 #     'uang': 'u a ŋ',
 # }
+
+臺灣閩南語羅馬字拼音對照音值韻母表 = {
+    'a': 'a', 'ah': 'aʔ', 'ap': 'ap', 'at': 'at', 'ak': 'ak',
+    'am': 'am', 'an': 'an', 'ang': 'aŋ',
+    'ann': 'aⁿ', 'annh': 'aⁿʔ',
+    'e': 'e', 'eh': 'eʔ', 'enn': 'eⁿ', 'ennh': 'eⁿʔ',
+    'i': 'i', 'ih': 'iʔ', 'ip': 'ip', 'it': 'it', 'ik': 'ik',
+    'inn': 'iⁿ', 'innh': 'iⁿʔ',
+    'im': 'im', 'in': 'in', 'ing': 'iŋ',
+    'o': 'ə', 'oh': 'əʔ',
+    'oo': 'o', 'ooh': 'oʔ', 'op': 'op', 'ok': 'ok',
+    'om': 'om', 'ong': 'oŋ',
+    'onn': 'oⁿ', 'onnh': 'oⁿʔ',
+    'oi': 'əi', 'oih': 'əiʔ',  # ##
+    'u': 'u', 'uh': 'uʔ', 'ut': 'ut', 'un': 'un',
+    'ai': 'ai', 'aih': 'aiʔ', 'ainn': 'aⁿiⁿ', 'ainnh': 'aⁿiⁿʔ',
+    'au': 'au', 'auh': 'auʔ', 'aunn': 'aⁿuⁿ', 'aunnh': 'aⁿuⁿʔ',
+    'ia': 'ia', 'iah': 'iaʔ', 'iap': 'iap', 'iat': 'iet', 'iak': 'iak',
+    'iam': 'iam', 'ian': 'ien', 'iang': 'iaŋ',
+    'iann': 'iⁿaⁿ', 'iannh': 'iⁿaⁿʔ',
+    'io': 'iə', 'ioh': 'iəʔ', 'iok': 'iok',
+    'iong': 'ioŋ', 'ionn': 'iⁿoⁿ',
+    'iu': 'iu', 'iuh': 'iuʔ', 'iut': 'iut',
+    'iunn': 'iⁿuⁿ', 'iunnh': 'iⁿuⁿʔ',
+    'ua': 'ua', 'uah': 'uaʔ', 'uat': 'uat', 'uak': 'uak',
+    'uan': 'uan', 'uann': 'uⁿaⁿ', 'uannh': 'uⁿaⁿʔ',
+    'ue': 'ue', 'ueh': 'ueʔ',
+    'uenn': 'uⁿeⁿ', 'uennh': 'uⁿeⁿʔ',
+    'ui': 'ui', 'uih': 'uiʔ',
+    'uinn': 'uⁿiⁿ', 'uinnh': 'uⁿiⁿʔ',
+    'iau': 'iau', 'iauh': 'iauʔ',
+    'iaunn': 'iⁿaⁿuⁿ', 'iaunnh': 'iⁿaⁿuⁿʔ',
+    'uai': 'uai', 'uaih': 'uaiʔ',
+    'uainn': 'uⁿaⁿiⁿ', 'uainnh': 'uⁿaⁿiⁿʔ',
+    'm': 'm̩', 'mh': 'm̩ʔ',
+    'ng': 'ŋ̩', 'ngh': 'ŋ̩ʔ',
+    'ioo': 'io', 'iooh': 'ioʔ',
+    'ee': 'ɛ', 'eeh': 'ɛʔ', 'eng': 'eŋ', 'uee': 'uee',
+    'ir': 'ɨ', 'irh': 'ɨʔ', 'irp': 'ɨp', 'irt': 'ɨt', 'irk': 'ɨk',
+    'irm': 'ɨm', 'irn': 'ɨn', 'irng': 'ɨŋ',
+    'irinn': 'ɨⁿiⁿ',
+    'ie': 'ie',
+    'uang': 'uaŋ',
+}
+
 
 IPA_TO_TLPA = {value: key for key, value in chain(臺灣閩南語羅馬字拼音對照音值韻母表.items(), 臺灣閩南語羅馬字拼音對照音值聲母表.items())}
 
