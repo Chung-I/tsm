@@ -1,11 +1,14 @@
-from typing import List, Dict
-from itertools import product
+from typing import List, Dict, Tuple, Iterable, Union
+from itertools import product, accumulate, groupby
 from functools import lru_cache
 from collections import defaultdict
 import re
 import logging
-import unicodedata
 
+import unicodedata
+from nltk.tree import Tree
+
+from tsm.sentence import Sentence
 from tsm.symbols import 臺灣閩南語羅馬字拼音聲母表
 from tsm.symbols import 臺灣閩南語羅馬字拼音韻母表
 from 臺灣言語工具.基本物件.公用變數 import 分字符號, 分詞符號
@@ -13,6 +16,88 @@ from tsm.symbols import iNULL, TONES, is_phn, all_syls
 from tsm.POJ_TL import poj_tl
 
 flatten = lambda l: [item for sublist in l for item in sublist]
+
+
+def is_preterminal(t: Tree):
+    return len(t) == 1 and isinstance(t[0], str)
+
+def path_compression(dictionary: Dict[Tuple[int], Tuple[int]]):
+    dictionary_compressed = {}
+    for key in dictionary:
+        value = dictionary[key]
+        while dictionary.get(value):
+            value = dictionary[value]
+        dictionary_compressed[key] = value
+    return dictionary_compressed
+
+def get_label(maybe_tree: Union[Tree, str]) -> str:
+    if isinstance(maybe_tree, Tree):
+        return maybe_tree.label()
+    return maybe_tree
+
+def lexify(obj):
+    if isinstance(obj, Tree):
+        return obj.flatten()
+    return obj
+
+def sandhi_mark(is_boundary: bool):
+    return " #" if is_boundary else ""
+
+def cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(
+    src_char_len: int,
+    tgt_words: List[str],
+    tgt_to_src: Dict[int, List[int]],
+    tgt_sandhi_boundaries: List[bool],
+) -> Tuple[List[int], List[bool]]:
+    src_char_sandhi_boundaries: List[bool] = [False] * src_char_len
+    tgt_char_start_and_ends: List[Tuple[int, int]] = word_lengths_to_char_start_and_ends(map(lambda word: len(Sentence.parse_mixed_text(word)), tgt_words))
+    tgt_word_indices_for_src_chars: List[int] = [-1] * src_char_len
+    for word_idx, (start, end) in enumerate(tgt_char_start_and_ends):
+        max_src_char_idx = -1
+        for tgt_char_idx in range(start, end):
+            for src_char_idx in tgt_to_src[tgt_char_idx]:
+                max_src_char_idx = max(max_src_char_idx, src_char_idx)
+                tgt_word_indices_for_src_chars[src_char_idx] = word_idx
+        src_char_sandhi_boundaries[max_src_char_idx] = tgt_sandhi_boundaries[word_idx]
+
+    src_word_lengths = [len(list(values)) for _, values in groupby(tgt_word_indices_for_src_chars)]
+    src_sandhi_boundaries = [src_char_sandhi_boundaries[idx-1] for idx in cumsum(src_word_lengths)]
+
+    return src_word_lengths, src_sandhi_boundaries
+
+def cumsum(lst):
+    return list(accumulate(lst))
+
+def alignment_to_tgt2src(alignment: List[Tuple[int, int]]) -> Dict[int, List[int]]:
+    """
+    paired alignment to target to source token mapping.
+    """
+    tgt2src: Dict[int, List[int]] = defaultdict(list)
+    for src_idx, tgt_idxs in alignment:
+        tgt2src[tgt_idxs].append(src_idx)
+    return tgt2src
+
+def phrase_boundary_to_start_and_ends(boundaries: List[bool]) -> List[Tuple[int, int]]:
+    """
+        [False, False, True, False, True] -> [(0, 3), (3, 5)]
+    """
+    start = 0
+    start_and_ends = []
+    for idx in range(len(boundaries)):
+        if boundaries[idx]:
+            start_and_ends.append((start, idx+1))
+            start = idx+1
+    return start_and_ends
+
+def word_lengths_to_char_start_and_ends(word_lengths: Iterable[int]) -> List[Tuple[int, int]]:
+    start = 0
+    end = 0
+    start_and_ends = []
+    for word_len in word_lengths:
+        end += word_len
+        start_and_ends.append((start, end))
+        start = end
+    return start_and_ends
 
 def read_file_to_lines(filename: str, unicode_escape=False) -> List[str]:
     if unicode_escape:

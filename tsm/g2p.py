@@ -1,208 +1,171 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 from nltk import tree
 from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
 from tsm.tone_sandhi import 台灣話口語講法
 
+import re
 import requests
 from nltk.tree import Tree, ParentedTree
 import logging
 from collections import defaultdict
-from itertools import groupby, accumulate
+from itertools import groupby
 
+from tsm.util import word_lengths_to_char_start_and_ends, lexify, cumsum, alignment_to_tgt2src
+from tsm.util import cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries, sandhi_mark
+from tsm.util import is_preterminal, path_compression
 from tsm.sentence import Sentence
 from tsm.clients import MosesClient
-
-
-LEXICAL_POS = {
-    'N', 'V', 'A', 'P'
-}
-
-NEVER_GOVERNED = {
-    'CP'
-}
+from tsm.head_finder import HeadFinder
+from tsm.chinese_head_finder import ChineseSemanticHeadFinder
 
 logger = logging.getLogger(__name__)
 
-def lexify(obj):
-    if isinstance(obj, Tree):
-        return obj.flatten()
-    return obj
 
-def find_right_boundary_preterminal(root, pos):
-    right_boundary_pos = pos + (len(root[pos])-1,)
-    if isinstance(root[right_boundary_pos], Tree):
-        return find_right_boundary_preterminal(root, right_boundary_pos)
-    else:
-        return right_boundary_pos
+class ToneSandhiG2P:
+    def __init__(self,  head_finder: HeadFinder, base_g2p: MosesClient = None, parser_url: str = None) -> None:
+        self.lexical_category = {'N', 'V', 'A', 'P'}
+        self.base_g2p = base_g2p
+        self.parser_url = parser_url
+        self.head_finder = head_finder
 
-def infer_sandhi_boundary(root: ParentedTree, phrase_is_lexically_governed) -> List[bool]:
+    def __call__(self, sent: str) -> str:
+        chars = Sentence.parse_mixed_text(sent)
+        res = requests.post(self.parser_url, json={"sentence": " ".join(chars)})
+        obj = res.json()
+        tgt_tree = ParentedTree.fromstring(obj['tree'])
+        alignment = obj['alignment']
+        tgt_to_src = alignment_to_tgt2src(alignment)
+        src_tokens = obj["source"].split()
+        src_word_lengths, src_sandhi_boundaries = self.get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
+        phns = self.base_g2p.translate(sent).split()
+        pron_as_phns = self.infer_pron(chars, phns, src_word_lengths, src_sandhi_boundaries)
+        return " ".join(pron_as_phns)
 
-    boundary_positions = set()
-    treepositions = root.treepositions()
-    for pos in phrase_is_lexically_governed:
-        if root[pos].label().endswith('P') and not phrase_is_lexically_governed[pos]:
-            logger.info(f"{lexify(root[pos])} is a sandhi domain")
-            right_boundary_pos = find_right_boundary_preterminal(root, pos)
+    def run(self, src_text, phn_text, tgt_tree, tgt_to_src):
+        src_tokens = Sentence.parse_mixed_text(src_text)
+        src_word_lengths, src_sandhi_boundaries = self.get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
+        phns = phn_text.split()
+        pron_as_phns = self.infer_pron(src_tokens, phns, src_word_lengths, src_sandhi_boundaries)
+        return " ".join(pron_as_phns)  
+
+    def find_boundary_preterminal(self, root, pos, direction="right"):
+        if isinstance(root[pos], Tree):
+            if direction == "right":
+                boundary_pos = pos + (len(root[pos])-1,)
+            elif direction == "left":
+                boundary_pos = pos + (0,)
+            else:
+                raise ValueError("direction must be either 'right' or 'left'")
+            return self.find_boundary_preterminal(root, boundary_pos)
+        else:
+            return pos
+
+    def infer_sandhi_boundary(self, root: ParentedTree, phrase_is_lexically_governed: Set[Tuple[int]]) -> List[bool]:
+
+        boundary_positions = set()
+        treepositions = root.treepositions()
+        for pos in filter(lambda p: isinstance(root[p], Tree), treepositions):
+            right_boundary_pos = self.find_boundary_preterminal(root, pos, "right")
             if root[right_boundary_pos[:-1]].label() == "PN" and right_boundary_pos != treepositions[-1]:
                 logger.info("pronouns that are not at the end of the sentence don't have its sandhi domain")
                 continue
-            boundary_positions.add(right_boundary_pos)
+            elif root[right_boundary_pos] == "的":
+                logger.info("for now set all occurrences of '的' as non-boundaries")
+                continue
+            elif (re.match(r"[A-Z]+P$", root[pos].label()) or root[pos].label() == 'NR') and not pos in phrase_is_lexically_governed:
+                logger.info(f"{lexify(root[pos])} is a sandhi domain")
+                boundary_positions.add(right_boundary_pos)
 
-    boundaries = []
-    for pos in treepositions:
-        if not isinstance(root[pos], Tree):
-            if root[pos] == "的" and root[pos[:-1]].label() == "DEC":
-                boundaries[-1] = True
-                boundaries.append(False)
-            else:
+        boundaries = []
+        for pos in treepositions:
+            if not isinstance(root[pos], Tree):
                 boundaries.append(pos in boundary_positions)
 
-    return boundaries
+        return boundaries
 
-def set_governed(root: ParentedTree, sibling_pos: Tuple[int], phrase_is_lexically_governed: Dict[Tuple[int], bool]) -> None:
-    phrase_is_lexically_governed[sibling_pos] = True
-    for child in root[sibling_pos]:
-        if isinstance(child, Tree) and child.label() not in NEVER_GOVERNED:
-            set_governed(root, child.treeposition(), phrase_is_lexically_governed)
+    def set_governed(self, root: ParentedTree, pos: Tuple[int], phrase_is_lexically_governed: Dict[Tuple[int], bool]) -> None:
+        phrase_is_lexically_governed[pos] = True
+        for child in root[pos]:
+            if isinstance(child, Tree):
+                self.set_governed(root, child.treeposition(), phrase_is_lexically_governed)
 
-def lexical_government(root: ParentedTree) -> Dict[Tuple[int], bool]:
-    "Determine if phrase_a is phrase_b's lexical head"
-    phrase_is_lexically_governed = {subtree.treeposition(): False for subtree in root.subtrees()}
-    for pos in root.treepositions():
-        if not isinstance(root[pos], Tree): # skip root and leaves
-            logger.info(f"{lexify(root[pos])} is terminal; skipping")
-            continue
+    def lexical_government(self, root: Tree) -> Set[Tuple[int]]:
+        "Determine if phrase_a is phrase_b's lexical head"
+        root = ParentedTree.convert(root)
+        phrase_positions = {pos for pos in root.treepositions() if isinstance(root[pos], Tree)}
+        phrase_is_lexically_governed: Set[Tuple[int]] = set()
 
-        if root[pos].parent() is None:
-            logger.info(f"{lexify(root[pos])} is root; skipping")
-            continue
+        head_of_phrases = {}
+        for pos in phrase_positions:
+            if not is_preterminal(root[pos]):
+                head: Tree = self.head_finder.determine_head(root[pos], root[pos].parent())
+                head_of_phrases[pos] = head.treeposition()
+        head_of_phrases = path_compression(head_of_phrases)
+        logger.info("\n".join([f"head of {lexify(root[pos])}: {lexify(root[head_pos])}" for pos, head_pos in head_of_phrases.items()]))
 
-        cur_label = root[pos].label()
-        cur_label_prefix = cur_label[0]
-        if cur_label_prefix not in LEXICAL_POS: # skip non-lexical head
-            logger.info(f"{lexify(root[pos])} is not lexical; skipping")
-            continue
+        # first_branching_nodes = {}
+        # for pos, head_pos in head_of_phrases.items():
+        #     if head_pos not in first_branching_nodes and len(root[pos]) > 1:
+        #         first_branching_nodes[head_pos] = pos
+        #     else:
+        #         if len(root[pos]) > 1 and len(pos) > len(first_branching_nodes[head_pos]):
+        #             first_branching_nodes[head_pos] = pos
 
-        if cur_label.endswith('P'):
-            logger.info(f"{lexify(root[pos])} is a phrase; skipping")
-            continue
+        phrases_that_heads_head: Dict[Set[Tuple[int]]] = defaultdict(set)
+        for pos, head_pos in head_of_phrases.items():
+            #if root[pos].label().startswith(root[head_pos][0]):
+            phrases_that_heads_head[head_pos].add(pos)
 
-        parent_label = root[pos].parent().label()
-        if parent_label.startswith(cur_label_prefix) and cur_label_prefix in LEXICAL_POS: # subt is the lexical head of the parent phrase
-            parent_index = root[pos].parent_index()
-            for sibling_index in filter(lambda idx: idx != parent_index, range(0, len(root[pos].parent()))):
-                sibling_pos = pos[:-1] + (sibling_index,)
-                set_governed(root, sibling_pos, phrase_is_lexically_governed)
-                logger.info(f"{lexify(root[pos])} lexically governs {lexify(root[sibling_pos])}")
+        # for head_pos, first_branching_pos in first_branching_nodes.items():
+        #     is_conjunction_phrase = any([child.label() == "CC" for child in root[first_branching_pos]])
+        #     if root[head_pos].label() not in self.head_finder.nonlexical_tags:
+        #         for child in root[first_branching_pos]:
+        #             child_pos = child.treeposition()
+        #             if isinstance(root[child_pos], Tree) and head_of_phrases.get(child_pos, child_pos) != head_pos and (not is_conjunction_phrase or child.label() == "CONJ"):
+        #                 logger.info(f"{lexify(child)} is governed by {lexify(root[head_pos])}")
+        #                 phrase_is_lexically_governed.add(child.treeposition())
 
-    return phrase_is_lexically_governed
+        for head_pos, phrases_pos in phrases_that_heads_head.items():
+            for phrase_pos in phrases_pos:
+                is_conjunction_phrase = any([child.label() == "CC" for child in root[phrase_pos]])
+                if root[head_pos].label() not in self.head_finder.nonlexical_tags:
+                    for child in root[phrase_pos]:
+                        child_pos = child.treeposition()
+                        if root[head_pos].label()[0] == 'V' and root[child_pos].label() == "LCP":
+                            continue
+                        if root[head_pos].label()[0] == 'V' and root[child_pos].label() == "NP" and child_pos < head_pos:
+                            continue
+                        if isinstance(root[child_pos], Tree) and head_of_phrases.get(child_pos, child_pos) != head_pos and (not is_conjunction_phrase or child.label() == "CONJ"):
+                            logger.info(f"{lexify(child)} is governed by {lexify(root[head_pos])}")
+                            phrase_is_lexically_governed.add(child.treeposition())
 
-def word_lengths_to_char_start_and_ends(word_lengths: List[int]) -> List[Tuple[int, int]]:
-    start = 0
-    end = 0
-    start_and_ends = []
-    for word_len in word_lengths:
-        end += word_len
-        start_and_ends.append((start, end))
-        start = end
-    return start_and_ends
+        return phrase_is_lexically_governed
 
-def phrase_boundary_to_start_and_ends(boundaries: List[bool]) -> List[Tuple[int, int]]:
-    """
-        [False, False, True, False, True] -> [(0, 3), (3, 5)]
-    """
-    start = 0
-    start_and_ends = []
-    for idx in range(len(boundaries)):
-        if boundaries[idx]:
-            start_and_ends.append((start, idx+1))
-            start = idx+1
-    return start_and_ends
+    def get_src_sandhi_start_and_ends(
+        self,
+        tgt_tree: ParentedTree,
+        src_tokens: List[str],
+        tgt_to_src: Dict[int, List[int]],
+    ) -> Tuple[List[int], List[bool]]:
+        logger.info(tgt_tree.pformat())
+        phrase_is_lexically_governed = self.lexical_government(tgt_tree)
+        tgt_sandhi_boundaries = self.infer_sandhi_boundary(tgt_tree, phrase_is_lexically_governed)
+        src_word_lengths, src_sandhi_boundaries = \
+            cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(len(src_tokens), tgt_tree.leaves(), tgt_to_src, tgt_sandhi_boundaries)
+        return src_word_lengths, src_sandhi_boundaries
 
-def get_character_level_sandhi_start_and_ends(words, word_sandhi_boundaries) -> List[Tuple[int, int]]:
-    """
-    """
-    char_sandhi_start_and_ends = []
-    char_start_and_ends = word_lengths_to_char_start_and_ends(map(len, words))
-    for start, end in phrase_boundary_to_start_and_ends(word_sandhi_boundaries):
-        char_start = char_start_and_ends[start][0]
-        char_end = char_start_and_ends[end-1][1]
-        char_sandhi_start_and_ends.append((char_start, char_end))
-    return char_sandhi_start_and_ends
-
-def alignment_to_tgt2src(alignment: List[Tuple[int, int]]) -> List[Dict[int, List[int]]]:
-    """
-    paired alignment to target to source token mapping.
-    """
-    tgt2src = defaultdict(list)
-    for src_idx, tgt_idxs in alignment:
-        tgt2src[tgt_idxs].append(src_idx)
-    return tgt2src
-
-def cumsum(lst):
-    return list(accumulate(lst))
-
-def cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(
-    src_char_len: int, tgt_words: List[str], tgt_to_src: Dict[int, List[int]], tgt_sandhi_boundaries: List[bool],
-) -> Tuple[List[int], List[bool]]:
-    src_char_sandhi_boundaries: List[bool] = [False] * src_char_len
-    tgt_char_start_and_ends: List[Tuple[int, int]] = word_lengths_to_char_start_and_ends(map(lambda word: len(Sentence.parse_mixed_text(word)), tgt_words))
-    tgt_word_indices_for_src_chars: List[int] = [-1] * src_char_len
-    for word_idx, (start, end) in enumerate(tgt_char_start_and_ends):
-        max_src_char_idx = -1
-        for tgt_char_idx in range(start, end):
-            for src_char_idx in tgt_to_src[tgt_char_idx]:
-                max_src_char_idx = max(max_src_char_idx, src_char_idx)
-                tgt_word_indices_for_src_chars[src_char_idx] = word_idx
-        src_char_sandhi_boundaries[max_src_char_idx] = tgt_sandhi_boundaries[word_idx]
-
-    src_word_lengths = [len(list(values)) for _, values in groupby(tgt_word_indices_for_src_chars)]
-    src_sandhi_boundaries = [src_char_sandhi_boundaries[idx-1] for idx in cumsum(src_word_lengths)]
-
-    return src_word_lengths, src_sandhi_boundaries
-
-def get_src_sandhi_start_and_ends(
-    tgt_tree: ParentedTree,
-    src_tokens: List[str],
-    tgt_to_src: Dict[int, List[int]],
-) -> List[Tuple[int, int]]:
-    logger.info(tgt_tree.pformat())
-    phrase_is_lexically_governed = lexical_government(tgt_tree)
-    tgt_sandhi_boundaries = infer_sandhi_boundary(tgt_tree, phrase_is_lexically_governed)
-    src_word_lengths, src_sandhi_boundaries = \
-        cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(len(src_tokens), tgt_tree.leaves(), tgt_to_src, tgt_sandhi_boundaries)
-    return src_word_lengths, src_sandhi_boundaries
-
-def sandhi_mark(is_boundary: bool):
-    return " #" if is_boundary else ""
-
-def infer_pron(chars: List[str], phns: List[str], src_word_lengths: List[int], src_sandhi_boundaries: List[bool]) -> List[str]:
-    start_and_ends = word_lengths_to_char_start_and_ends(src_word_lengths)
-    words = ["-".join(chars[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
-    word_phns = ["-".join(phns[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
-    logger.info(f"grapheme phoneme pairs sent to singhong system: {' '.join(words)}, {' '.join(word_phns)}")
-    sent = 拆文分析器.建立句物件(" ".join(words), " ".join(word_phns))
-    tone_sandhi_sent = 台灣話口語講法(sent, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
-    sent_text = tone_sandhi_sent.看音(" ", " ", " ")
-    return sent_text.split()
-
-def g2p(sent, parser_url, g2p_client):
-    chars = Sentence.parse_mixed_text(sent)
-    res = requests.post(parser_url, json={"sentence": " ".join(chars)})
-    obj = res.json()
-    tgt_tree = ParentedTree.fromstring(obj['tree'])
-    alignment = obj['alignment']
-    tgt_to_src = alignment_to_tgt2src(alignment)
-    src_tokens = obj["source"].split()
-    src_word_lengths, src_sandhi_boundaries = get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
-    phns = g2p_client.translate(sent).split()
-    pron_as_phns = infer_pron(chars, phns, src_word_lengths, src_sandhi_boundaries)
-    return " ".join(pron_as_phns)
-
+    def infer_pron(self, chars: List[str], phns: List[str], src_word_lengths: List[int], src_sandhi_boundaries: List[bool]) -> List[str]:
+        start_and_ends = word_lengths_to_char_start_and_ends(src_word_lengths)
+        words = ["-".join(chars[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
+        word_phns = ["-".join(phns[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
+        logger.info(f"grapheme phoneme pairs sent to singhong system: {' '.join(words)}, {' '.join(word_phns)}")
+        sent = 拆文分析器.建立句物件(" ".join(words), " ".join(word_phns))
+        tone_sandhi_sent = 台灣話口語講法(sent, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
+        sent_text = tone_sandhi_sent.看音(" ", " ", " ")
+        return sent_text.split()
 
 if __name__ == "__main__":
     from tsm.util import read_file_to_lines, write_lines_to_file
-    # You need to wait until the docker is ready.
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('input_path')
@@ -214,7 +177,9 @@ if __name__ == "__main__":
 
     sents = read_file_to_lines(args.input_path)
     g2p_client = MosesClient(args.g2p_url)
+    head_finder = ChineseSemanticHeadFinder()
     sent_of_phonemes = []
     fp = open(args.output_path, 'w')
+    g2p = ToneSandhiG2P(head_finder, g2p_client, args.parser_url)
     for sent in sents:
-        g2p(sent, args.parser_url, g2p_client)
+        g2p(sent)
