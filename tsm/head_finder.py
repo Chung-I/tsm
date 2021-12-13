@@ -6,6 +6,8 @@ from abc import ABCMeta, abstractmethod
 
 from nltk import Tree
 
+from tsm.util import get_label
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,13 +37,13 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
     categories_to_avoid : `List[str]`
         Constituent types to avoid as head.
     """
-    def __init__(self, categories_to_avoid: List[str]):
+    def __init__(self, *categories_to_avoid: List[str]):
         self.non_terminal_info: Dict[str, List[List[str]]] = {}
         self.default_rule = None
         self.default_left_rule: List[str] = [""] * (len(categories_to_avoid) + 1)
         self.default_right_rule: List[str] = [""] * (len(categories_to_avoid) + 1)
 
-        if len(categories_to_avoid.length) > 0:
+        if len(categories_to_avoid) > 0:
             self.default_left_rule[0] = "leftexcept"
             self.default_right_rule[0] = "rightexcept"
             self.default_left_rule[1:] = categories_to_avoid
@@ -60,21 +62,21 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
         if t is None or not isinstance(t, Tree):
             raise ArgumentError("Can't return head of null or leaf Tree.")
 
-        logger.info("determine_head for " + t.label())
+        logger.info("determine_head for " + get_label(t))
 
         if len(t) == 1:
-            logger.info("Only one child determines " + t[0].label() + " as head of " + t.label());
+            logger.info("Only one child determines " + get_label(t[0]) + " as head of " + get_label(t))
             return t[0]
 
         return self.determine_non_trivial_head(t, parent)
 
     def determine_non_trivial_head(self, t: Tree, parent: Tree) -> Tree:
         the_head: Tree = None
-        mother_category: str = t.label()
+        mother_category: str = get_label(t)
         if mother_category.startswith('@'):
             mother_category = mother_category[1:]
 
-        logger.info("Looking for head of " + t.label())
+        logger.info("Looking for head of " + get_label(t))
 
         how: List[List[str]] = self.non_terminal_info.get(mother_category)
         if how is None:
@@ -94,7 +96,7 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
             if the_head is not None:
                 break
 
-        logger.info(f"  Chose {"null node" if theHead is None else the_head.label()}")
+        logger.info(f"  Chose {'null node' if the_head is None else get_label(the_head)}")
         return the_head
 
     def traverse_locate(self, daughter_trees: List[Tree], how: List[str], last_resort: bool) -> Tree:
@@ -108,9 +110,9 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
         elif how[0] == "rightexcept":
             head_idx = self.find_right_except_head(daughter_trees, how)
         elif how[0] == "leftdis":
-            raise NotImplementedError
+            head_idx = self.find_left_dis_head(daughter_trees, how)
         elif how[0] == "rightdis":
-            raise NotImplementedError
+            head_idx = self.find_right_dis_head(daughter_trees, how)
         else:
             raise ArgumentError(f"ERROR: invalid direction type {how[0]} to non_terminal_info map in AbstractCollinsHeadFinder.")
 
@@ -143,14 +145,14 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
         head_idx: int = 0
         for i in range(1, len(how)):
             for head_idx in range(len(daughter_trees)):
-                child_category: str = daughter_trees[head_idx].label()
+                child_category: str = get_label(daughter_trees[head_idx])
                 if how[i] == child_category:
                     return head_idx
         return -1
 
     def find_left_dis_head(self, daughter_trees: List[Tree], how: List[str]) -> int:
         for head_idx in range(len(daughter_trees)):
-            child_category = daughter_trees[head_idx].label()
+            child_category = get_label(daughter_trees[head_idx])
             for i in range(1, len(how)):
                 if how[i] == child_category:
                     return head_idx
@@ -158,7 +160,7 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
 
     def find_left_except_head(self, daughter_trees: List[Tree], how: List[str]) -> int:
         for head_idx in range(len(daughter_trees)):
-            child_category: str = daughter_trees[head_idx].label()
+            child_category: str = get_label(daughter_trees[head_idx])
             if child_category not in how[1:]:
                 return head_idx
         return -1
@@ -167,7 +169,7 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
         head_idx: int = 0
         for i in range(1, len(how)):
             for head_idx in range(len(daughter_trees)-1, -1, -1):
-                child_category: str = daughter_trees[head_idx].label()
+                child_category: str = get_label(daughter_trees[head_idx])
                 if how[i] == child_category:
                     return head_idx
         return -1
@@ -175,7 +177,7 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
     # from right, but search for any of the categories, not by category in turn
     def find_right_dis_head(self, daughter_trees: List[Tree], how: List[str]) -> int:
         for head_idx in range(len(daughter_trees)-1, -1, -1):
-            child_category = daughter_trees[head_idx].label()
+            child_category = get_label(daughter_trees[head_idx])
             for i in range(1, len(how)):
                 if how[i] == child_category:
                     return head_idx
@@ -183,7 +185,7 @@ class AbstractCollinsHeadFinder(HeadFinder, CopulaHeadFinder):
 
     def find_right_except_head(self, daughter_trees: List[Tree], how: List[str]) -> int:
         for head_idx in range(len(daughter_trees)-1, -1, -1):
-            child_category: str = daughter_trees[head_idx].label()
+            child_category: str = get_label(daughter_trees[head_idx])
             if child_category not in how[1:]:
                 return head_idx
         return -1
