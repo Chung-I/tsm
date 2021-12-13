@@ -4,17 +4,7 @@ from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
 from 臺灣言語工具.音標系統.閩南語.臺灣閩南語羅馬字拼音 import 臺灣閩南語羅馬字拼音
 
 from tsm.sentence import Sentence
-
-def read_csv(path):
-    pairs = {}
-    with open(path, 'r') as f:
-        for row in csv.DictReader(f):
-            wavfile = row['音檔']
-            taibun = row['漢字']
-            tailo = row['羅馬字']
-            pairs[wavfile] = (taibun, tailo)
-
-    return pairs
+from tsm.util import read_suisiann_csv
 
 if __name__ == '__main__':
     import argparse
@@ -27,7 +17,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    pairs = read_csv(args.input_file)
+    pairs = read_suisiann_csv(args.input_file)
 
     fo_src = open(args.output_prefix + '.' + args.src, 'w')
     fo_tgt = open(args.output_prefix + '.' + args.tgt, 'w')

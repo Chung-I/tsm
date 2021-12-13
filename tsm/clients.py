@@ -31,10 +31,7 @@ class MosesClient:
 
     def format_input(self, sent):
         data = {
-            "text": " ".join(sent),
-            "align": str(self.config.align).lower(),
-            "report-all-factors": str(self.config.report_all_factors).lower(),
-            'nbest': self.config.n_best,
+            "text": sent,
         }
         return data
 

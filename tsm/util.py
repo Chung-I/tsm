@@ -5,12 +5,14 @@ from collections import defaultdict
 import re
 import logging
 import unicodedata
+import csv
 
 from tsm.symbols import 臺灣閩南語羅馬字拼音聲母表
 from tsm.symbols import 臺灣閩南語羅馬字拼音韻母表
 from 臺灣言語工具.基本物件.公用變數 import 分字符號, 分詞符號
 from tsm.symbols import iNULL, TONES, is_phn, all_syls
 from tsm.POJ_TL import poj_tl
+from tsm.sentence import Sentence
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
@@ -27,6 +29,24 @@ def write_lines_to_file(filename: str, lines: List[str]) -> None:
     with open(filename, 'w') as fp:
         for line in lines:
             fp.write(line + '\n')
+
+def read_suisiann_csv(filename: str):
+    pairs = {}
+    with open(filename, 'r') as f:
+        for row in csv.DictReader(f):
+            wavfile = row['音檔']
+            taibun = row['漢字']
+            tailo = row['羅馬字']
+            pairs[wavfile] = (taibun, tailo)
+
+    return pairs
+
+def read_suisiann_file_to_gp_pairs(filename: str):
+    pairs = read_suisiann_csv(filename)
+    for wavfile, (taibun, tailo) in pairs.items():
+        sent_obj = Sentence.parse_singhong_sent((taibun, tailo))
+        graphs, phns = Sentence.get_grapheme_phoneme_pairs(sent_obj)
+        yield wavfile, graphs, phns
 
 def generate_tsm_lexicon(lexicon_path: str,
                          grapheme_with_tone: bool = False,
