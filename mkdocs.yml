@@ -1,0 +1,32 @@
+site_name: TSM
+site_description: TSM is a ..
+site_url: http://localhost:8080/tsm 
+
+theme:
+  name: material
+  palette:
+    primary: blue
+    accent: grey
+  highlightjs: true
+  hljs_languages:
+  - python
+  - typescript
+  - json
+
+repo_name: Chung-I/tsm
+
+nav:
+- Home: README.md
+- Repository: https://github.com/Chung-I/tsm
+
+markdown_extensions:
+- toc:
+    permalink: true
+    toc_depth: 3
+- markdown.extensions.codehilite:
+    guess_lang: true
+- admonition
+- codehilite
+- extra
+- pymdownx.highlight
+- pymdownx.superfences
