@@ -45,8 +45,8 @@ class ToneSandhiG2P:
         src_tokens = Sentence.parse_mixed_text(src_text)
         src_word_lengths, src_sandhi_boundaries = self.get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
         phns = phn_text.split()
-        pron_as_phns = self.infer_pron(src_tokens, phns, src_word_lengths, src_sandhi_boundaries)
-        return " ".join(pron_as_phns)  
+        graphs, phns = self.infer_pron(src_tokens, phns, src_word_lengths, src_sandhi_boundaries)
+        return graphs, phns
 
     def find_boundary_preterminal(self, root, pos, direction="right"):
         if isinstance(root[pos], Tree):
@@ -161,8 +161,9 @@ class ToneSandhiG2P:
         logger.info(f"grapheme phoneme pairs sent to singhong system: {' '.join(words)}, {' '.join(word_phns)}")
         sent = 拆文分析器.建立句物件(" ".join(words), " ".join(word_phns))
         tone_sandhi_sent = 台灣話口語講法(sent, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
-        sent_text = tone_sandhi_sent.看音(" ", " ", " ")
-        return sent_text.split()
+        graph_text = tone_sandhi_sent.看型("-", " ", " ")
+        phn_text = tone_sandhi_sent.看音("-", " ", " ")
+        return graph_text.split(), phn_text.split()
 
 if __name__ == "__main__":
     from tsm.util import read_file_to_lines, write_lines_to_file
