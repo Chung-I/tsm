@@ -8,6 +8,15 @@ def 台灣話口語講法(句物件, apply_tone_sandhi=True, to_phn=True, to_TLP
         raise NotImplementedError('to_phn and to_TLPA cannot be True at the same time')
 
     結果句物件 = 句物件.轉音(臺灣閩南語羅馬字拼音, 函式='音值')
+    for 詞物件, 原底詞 in zip(結果句物件.網出詞物件(), 句物件.網出詞物件()):
+        新陣列 = []
+        for 字物件, 原底字 in zip(詞物件.內底字, 原底詞.內底字):
+            if len(字物件.音) != 3 and 原底字.型 not in 標點符號:
+                # give foreign word a very unlikely pronunciation so that it won't be confused with the pronunciation of the word in the dictionary
+                字物件.音 = ('p', 'erenn', 2)
+            新陣列.append(字物件)
+        詞物件.內底字 = 新陣列
+
     判斷陣列 = 變調判斷.判斷(結果句物件)
     這馬所在 = 0
     for 詞物件, 原底詞 in zip(結果句物件.網出詞物件(), 句物件.網出詞物件()):
@@ -17,7 +26,7 @@ def 台灣話口語講法(句物件, apply_tone_sandhi=True, to_phn=True, to_TLP
             if 變調方式 == 變調判斷.愛提掉的:
                 pass
             else:
-                if 字物件.音 == (None,):
+                if 字物件.音 == (None,) or 字物件.音 ==  ('p', 'erenn', 2):
                     音 = 原底字.音
                     if add_circumfix_for_non_taigi_words:
                         音 = f"##PUNCT{原底字.音}##PUNCT" if 原底字.音 in 標點符號 else f"##OOL{原底字.音}##OOL"

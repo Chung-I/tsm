@@ -21,7 +21,7 @@ flatten = lambda l: [item for sublist in l for item in sublist]
 
 
 def is_preterminal(t: Tree):
-    return len(t) == 1 and isinstance(t[0], str)
+    return all(map(lambda c: isinstance(c, str), t))
 
 def path_compression(dictionary: Dict[Tuple[int], Tuple[int]]):
     dictionary_compressed = {}

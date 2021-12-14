@@ -23,10 +23,15 @@ class TestG2P(unittest.TestCase):
         total_distance = 0
         total_words = 0
         for pred, gold in zip(preds, golds):
+            pred = re.split(r"[\-\s]+", " ".join(pred))
             pred = list(filter(lambda w: re.match(r'[a-zA-Z]+\d?', w), pred))
             gold = list(filter(lambda w: re.match(r'[a-zA-Z]+\d?', w), gold))
             total_distance += editdistance.eval(pred, gold)
             total_words += len(gold)
+            try:
+                assert pred == gold
+            except AssertionError as e:
+                print(e)
         logger.info(f"{total_distance} {total_words}")
         return total_distance / total_words
 
@@ -63,12 +68,8 @@ class TestG2P(unittest.TestCase):
         actual_prons = [test_case["actual_pronunciation"].split() for test_case in test_cases]
         inferred_prons = []
         for test_case in test_cases:
-            pron = self.send_fixtures_to_g2p(g2p, test_case)
-            inferred_prons.append(pron)
-        try:
-            assert inferred_prons == actual_prons
-        except AssertionError as e:
-            print(e)
+            graph, inferred_pron = self.send_fixtures_to_g2p(g2p, test_case)
+            inferred_prons.append(inferred_pron)
         assert self.term_error_rate(inferred_prons, actual_prons) < 0.05
 
     def test_cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(self):
@@ -97,10 +98,6 @@ class TestG2P(unittest.TestCase):
             graph_text, phn_text = Sentence.get_grapheme_phoneme_pairs(sent_obj)
             test_case["src_text"] = graph_text
             test_case["written_pronunciation"] = phn_text
-            inferred_pron = self.send_fixtures_to_g2p(g2p, test_case)
+            _, inferred_pron = self.send_fixtures_to_g2p(g2p, test_case)
             inferred_prons.append(inferred_pron)
-        try:
-            assert inferred_prons == actual_prons
-        except AssertionError as e:
-            print(e)
         assert self.term_error_rate(inferred_prons, actual_prons) < 0.1
