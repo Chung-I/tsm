@@ -4,6 +4,7 @@ from functools import lru_cache
 from collections import defaultdict
 import re
 import logging
+import os
 
 import unicodedata
 import csv
@@ -19,6 +20,8 @@ from tsm.sentence import Sentence
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
+def file_exists_and_not_empty(file: str):
+    return os.path.exists(file) and os.path.getsize(file) > 0
 
 def is_preterminal(t: Tree):
     return all(map(lambda c: isinstance(c, str), t))
