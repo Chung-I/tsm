@@ -214,7 +214,7 @@ TSM_TLPA_RHYME_TO_PHONE = {'a': 'a', 'ah': 'a h', 'ap': 'a p', 'at': 'a t', 'ak'
 TSM_IPA_TO_ARPABET = {
     'b': 'B', 'oⁿ': 'AO NN', 's': 'S', 'ŋ̩': 'NG', 'dz': 'DZ', 'k': 'KK', 'n': 'N', 'a': 'AA', 'l': 'L', 'iⁿ': 'IY NN',
     'ɨⁿ': 'IH NN', 'ɛ': 'EH', 'u': 'UW', 'i': 'IY', 'o': 'AO', 't': 'TT', 'tsʰ': 'TSH', 'ə': 'AX', 'ŋ': 'NG', 'g': 'G',
-    'ʔ': 'Q', 'eⁿ': 'EH NN', 'ɨ': 'IH', 'uⁿ': 'UW NN', 'aⁿ': 'AA NN', 'p': 'PP', 'm̩': 'M', 'm': 'M', 'kʰ': 'KKH',
+    'ʔ': '', 'eⁿ': 'EH NN', 'ɨ': 'IH', 'uⁿ': 'UW NN', 'aⁿ': 'AA NN', 'p': 'PP', 'm̩': 'M', 'm': 'M', 'kʰ': 'KKH',
     'ts': 'TS', 'tʰ': 'TTH', 'h': 'HH', 'pʰ': 'PPH', 'e': 'EH', 'ee': 'EH'
 }
 
