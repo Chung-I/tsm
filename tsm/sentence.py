@@ -6,6 +6,7 @@ import zhon.hanzi
 import cn2an
 import opencc
 
+from kesi.butkian.kongiong import si_lomaji
 from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
 from 臺灣言語工具.基本物件.公用變數 import 標點符號
 from 臺灣言語工具.基本物件.句 import 句
@@ -43,6 +44,10 @@ class Sentence:
         return words
 
     @staticmethod
+    def an2cn(line, mode='direct'):
+        return re.sub(r'(\d+)', lambda x: cn2an.an2cn(x.group(), mode=mode), line)
+
+    @staticmethod
     def normalize(line: str):
         line = unicodedata.normalize("NFKC", line)
         line = cn2an.transform(line, "an2cn")
@@ -58,30 +63,63 @@ class Sentence:
         return Sentence.word_segmenter_cache["ckip"].cut(sent)
 
     @staticmethod
-    def parse_mixed_text(mixed_text, remove_punct=False):
+    def parse_mixed_text(mixed_text, remove_punct=False, char_level=True):
+        zh_suffix = "" if char_level else "+"
         if remove_punct:
-            return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]|([^{zhon.hanzi.characters}\W]\')+", mixed_text)]
+            return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]{zh_suffix}|([^{zhon.hanzi.characters}\W]\')+", mixed_text)]
         else:
-            return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]|([^{zhon.hanzi.characters}\W]|\')+|\p{{P}}+", mixed_text)]
+            return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]{zh_suffix}|([^{zhon.hanzi.characters}\W]|\')+|\p{{P}}+", mixed_text)]
 
     @staticmethod
-    def parse_singhong_sent(sent: Union[str, Tuple[str, str]], to_numbered_tone_mark=True):
+    def parse_singhong_sent(sent: Union[str, Tuple[str, str]]):
         if isinstance(sent, str):
             taibun, tailo = map(lambda words: " ".join(words), zip(*[word.split('｜') for word in sent.split()]))
         else:
             taibun, tailo = sent
         sent_obj = 拆文分析器.建立句物件(taibun, tailo)
-        if to_numbered_tone_mark:
-            sent_obj = sent_obj.轉音(臺灣閩南語羅馬字拼音, 函式="轉換到臺灣閩南語羅馬字拼音")
         return sent_obj
 
     @staticmethod
-    def process_singhong_sent(sent_obj, output_type='char', remove_punct=True):
-        char_delimiter = ' ' if output_type == 'char' else ''
-        words = sent_obj.看型(物件分字符號=char_delimiter, 物件分詞符號=' ', 物件分句符號=' ').strip().split()
+    def parse_mixed_taibun_tailo(mixed_sent: str, cutted=True):
+        if not cutted:
+            mixed_sent = re.sub(f"([{zhon.hanzi.characters}])", r" \1 ", mixed_sent)
+        sent_obj = 拆文分析器.建立句物件(mixed_sent)
+        return sent_obj
+
+    @staticmethod
+    def parse_tailo(tailo: str):
+        sent_obj = 拆文分析器.建立句物件(tailo, tailo)
+        return sent_obj
+
+    @staticmethod
+    def process_singhong_sent(
+        sent_obj,
+        output_type='char',
+        tailo_char_delimiter="-",
+        remove_punct=True,
+        to_numbered_tone_mark=True,
+        remove_khinsiann=False
+    ):
+        if to_numbered_tone_mark:
+            sent_obj = sent_obj.轉音(臺灣閩南語羅馬字拼音, 函式="轉換到臺灣閩南語羅馬字拼音")
+        tailo_char_delimiter = ' ' if output_type == 'char' else tailo_char_delimiter
+        taibun_char_delimiter = ' ' if output_type == 'char' else ''
+        def stringify(word, show_type="看型"):
+            char_objs = word.篩出字物件()
+            chars = [getattr(char, show_type)() for char in char_objs]
+            if remove_khinsiann:
+                chars = [re.sub(r"--(\w+)", r"\1", char) for char in chars]
+            has_tailo = any(map(lambda char: all(map(si_lomaji, char)), chars))
+            char_delimiter = tailo_char_delimiter if has_tailo else taibun_char_delimiter
+            return char_delimiter.join(chars)
+
+        words = [word for word in sent_obj.網出詞物件()]
         if remove_punct:
-            words = filter(lambda x: x not in 標點符號, words)
-        return " ".join(words)
+            words = list(filter(lambda x: x.看型() not in 標點符號, words))
+
+        _words = [stringify(word, "看型") for word in words]
+        _phns = [stringify(word, "看音") for word in words]
+        return _words, _phns
 
     @staticmethod
     def get_grapheme_phoneme_pairs(sent_obj: 句, remove_punct=True, remove_neutral_tone_mark=True):
