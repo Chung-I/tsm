@@ -6,6 +6,7 @@ import zhon.hanzi
 import cn2an
 import opencc
 
+from kesi.butkian.kongiong import si_lomaji
 from 臺灣言語工具.解析整理.拆文分析器 import 拆文分析器
 from 臺灣言語工具.基本物件.公用變數 import 標點符號
 from 臺灣言語工具.基本物件.句 import 句
@@ -70,7 +71,7 @@ class Sentence:
             return [match.group() for match in re.finditer(f"[{zhon.hanzi.characters}]{zh_suffix}|([^{zhon.hanzi.characters}\W]|\')+|\p{{P}}+", mixed_text)]
 
     @staticmethod
-    def parse_singhong_sent(sent: Union[str, Tuple[str, str]], to_numbered_tone_mark=True):
+    def parse_singhong_sent(sent: Union[str, Tuple[str, str]]):
         if isinstance(sent, str):
             taibun, tailo = map(lambda words: " ".join(words), zip(*[word.split('｜') for word in sent.split()]))
         else:
@@ -91,23 +92,26 @@ class Sentence:
         return sent_obj
 
     @staticmethod
-    def process_singhong_sent(sent_obj, output_type='char', remove_punct=True, to_numbered_tone_mark=True):
+    def process_singhong_sent(
+        sent_obj,
+        output_type='char',
+        tailo_char_delimiter="-",
+        remove_punct=True,
+        to_numbered_tone_mark=True,
+        remove_khinsiann=False
+    ):
         if to_numbered_tone_mark:
             sent_obj = sent_obj.轉音(臺灣閩南語羅馬字拼音, 函式="轉換到臺灣閩南語羅馬字拼音")
-        tailo_char_delimiter = ' ' if output_type == 'char' else '-'
+        tailo_char_delimiter = ' ' if output_type == 'char' else tailo_char_delimiter
         taibun_char_delimiter = ' ' if output_type == 'char' else ''
         def stringify(word, show_type="看型"):
-            chars = ""
-            for idx, char in enumerate(word.篩出字物件()):
-                text = getattr(char, show_type)()
-                prefix = ""
-                if idx > 0:
-                    if re.match("\w+\d", text):
-                        prefix = tailo_char_delimiter
-                    else:
-                        prefix = taibun_char_delimiter
-                chars += prefix + text
-            return chars
+            char_objs = word.篩出字物件()
+            chars = [getattr(char, show_type)() for char in char_objs]
+            if remove_khinsiann:
+                chars = [re.sub(r"--(\w+)", r"\1", char) for char in chars]
+            has_tailo = any(map(lambda char: all(map(si_lomaji, char)), chars))
+            char_delimiter = tailo_char_delimiter if has_tailo else taibun_char_delimiter
+            return char_delimiter.join(chars)
 
         words = [word for word in sent_obj.網出詞物件()]
         if remove_punct:
