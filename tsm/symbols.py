@@ -226,6 +226,11 @@ TSM_TLPA_TO_ARPABET = {
 TSM_TONE_TO_FIVE_LEVEL_TONE = {
     '1': '55', '2': '51', '3':'21', '4': '21', '5': '24', '7': '33', '8': '53', '9': '24', '10': '21',
 }
+
+MANDARIN_TONE_TO_FIVE_LEVEL_TONE = {
+    '1': '55', '2': '24', '3':'21', '4': '51', '5': '1',
+}
+
 # TSM_TLPA_RHYME_TO_PHONE = {'a': 'AA', 'ah': 'AA Q', 'ap': 'AA P', 'at': 'AA T', 'ak': 'AA K',
 #     'am': 'AA M', 'an': 'AA N', 'ang': 'AA NG', 'ann': 'A NN', 'annh': 'A NN Q',
 #     'e': 'EH', 'eh': 'EH Q', 'enn': 'E NN', 'ennh': 'E NN Q',

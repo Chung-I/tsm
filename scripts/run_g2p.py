@@ -19,6 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('tgt_tree_file')
     parser.add_argument('wav_file')
     parser.add_argument('out_file')
+    parser.add_argument('--disable-tone-sandhi', action='store_true')
     args = parser.parse_args()
 
     fi_src = open(args.src_file)
@@ -41,7 +42,7 @@ if __name__ == '__main__':
         alignment: List[Tuple[int, int]] = [tuple(int(x) for x in a.split('-')) for a in alignment_str.split()]
         tgt_to_src = alignment_to_tgt2src(alignment)
         try:
-            graphs, phns = g2p.run(src_text, phn_text, tgt_tree, tgt_to_src)
+            graphs, phns = g2p.run(src_text, phn_text, tgt_tree, tgt_to_src, apply_tone_sandhi=not args.disable_tone_sandhi)
             writer.writerow([wavfile, ' '.join(graphs), ' '.join(phns)])
         except:
             print(f"skip {src_text} {phn_text}")

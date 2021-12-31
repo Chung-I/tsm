@@ -16,6 +16,7 @@ LANGS = {
     "#P": 0, # punctuation
     "TAI": 1,
     "EN": 2,
+    "ZH": 3,
 }
 
 STYLES = {
@@ -25,6 +26,7 @@ STYLES = {
 
 SPEAKERS = {
     "tai": 0,
+    "jarvis": 1,
 }
 
 pad = "_"
@@ -71,14 +73,16 @@ def write_csv(path, datas, infer=False):
     with open(path, 'w') as f:
         writer = csv.writer(f, delimiter='|')
         for data in datas:
-            wavfile, speaker, style,  transcript, lang_code = data
             if infer:
+                wavfile, transcript, lang_code = data
                 wavfile = Path(wavfile).stem
+                writer.writerow([str(wavfile), transcript, lang_code])
             else:
+                wavfile, speaker, style,  transcript, lang_code = data
                 wavfile = Path("/volume/tts/tai/feature_16k/bfcc/") / Path(wavfile).with_suffix(".f32").name
-            writer.writerow([str(wavfile), speaker, style, transcript, lang_code])
+                writer.writerow([str(wavfile), speaker, style, transcript, lang_code])
 
-def read_dict(path, encoding="utf-8"):
+def read_dict(path, encoding="utf-8", ipa=False):
     lexicon = {}
     
     with open(path, encoding=encoding) as f:
@@ -88,6 +92,9 @@ def read_dict(path, encoding="utf-8"):
             words = re.split("\s+", line)
             word = words[0].lower()
             pron = " ".join(words[1:]).strip()
+            if ipa:
+                pron = re.sub(r"[ˌˈ]+", "", pron)
+                pron = " ".join(pron)
             lexicon[word] = pron
     return lexicon
 
@@ -103,15 +110,18 @@ def merge_dict(dicts):
             merged[word] = pron
     return merged
 
-def list_level_join(list_of_lists, delimiter):
+def list_level_join(list_of_lists, delimiter, keep_last_delimiter=True):
     new_lst = []
     for lst in list_of_lists:
         new_lst += lst
         new_lst.append(delimiter)
 
-    return new_lst[:-1]
+    if not keep_last_delimiter:
+        new_lst = new_lst[:-1]
+    return new_lst
 
-def postprocess_text(foreign_dict, sent, short_pause="sp", word_delimiter="#E", remove_stress=True):
+def postprocess_text(foreign_dict, sent, short_pause="sp", word_delimiter="#E", output_type='arpabet', remove_stress=True,
+                     remove_punct=False):
     out_of_lexicon_words = set()
     def process_foreign_word(match):
         form = match.group(1)
@@ -133,25 +143,31 @@ def postprocess_text(foreign_dict, sent, short_pause="sp", word_delimiter="#E", 
         form = word.看音()
         phns = []
         if re.match("##PUNCT(.*?)##PUNCT", form):
-            if idx < len(words) - 1:
+            if not args.remove_punct:
                 phns.append(short_pause)
                 word_level_lang_codes.append("#P")
-        elif match := re.match(r"##OOL(.*?)##OOL", form):
+        elif re.match(r"##OOL(.*?)##OOL", form):
+            match = re.match(r"##OOL(.*?)##OOL", form)
             char_phns = process_foreign_word(match)
             phns += char_phns
             word_level_lang_codes.append("EN")
         else:
             for character in word.篩出字物件():
                 pron = character.音
-                if match := re.match(r"##OOL(.*?)##OOL", pron):
+                match = re.match(r"##OOL(.*?)##OOL", pron)
+                if match:
                     char_phns = process_foreign_word(match)
                     phns += char_phns
                 else:
                     for phn in pron.split(" "):
                         if re.match("[^\d]+", phn):
                             try:
-                                raw_phn = TSM_IPA_TO_ARPABET[phn]
-                                phns.append(raw_phn)
+                                if output_type == 'ipa' and not re.match("##PUNCT(.*?)##PUNCT", phn):
+                                    phns += list(filter(lambda x: x != 'ʔ', phn))
+                                else:
+                                    raw_phn = TSM_IPA_TO_ARPABET[phn]
+                                    if len(raw_phn):
+                                        phns += raw_phn.split()
                             except KeyError:
                                 print(sent.看型())
                                 print(f"|{form}| {phn} not found in TSM_IPA_TO_ARPABET")
@@ -160,12 +176,13 @@ def postprocess_text(foreign_dict, sent, short_pause="sp", word_delimiter="#E", 
                         else:
                             print(f"Unknown phoneme: {phn}")
             word_level_lang_codes.append("TAI")
-        word_level_phns.append(phns)
+        if phns:
+            word_level_phns.append(phns)
 
     phns = list_level_join(word_level_phns, word_delimiter)
-    phn_level_lang_codes = list_level_join([[lang_code] * len(phns) for phns, lang_code in zip(word_level_phns, word_level_lang_codes)], word_delimiter)
+    phn_level_lang_codes = list_level_join([[lang_code] * len(phns) for phns, lang_code in zip(word_level_phns, word_level_lang_codes)], "#P")
     phn_text = " ".join(phns)
-    assert len(flatten(word_level_phns)) == len(flatten(phn_level_lang_codes))
+    assert len(phn_text.split()) == len(" ".join(phn_level_lang_codes).split())
     return phn_text, phn_level_lang_codes, word_level_lang_codes, out_of_lexicon_words
 
 def text_to_phn(text):
@@ -206,24 +223,28 @@ if __name__ == "__main__":
     parser.add_argument('--dicts', nargs='+')
     parser.add_argument('--ool-file')
     parser.add_argument('--infer', action='store_true')
+    parser.add_argument('--ipa', action='store_true')
+    parser.add_argument('--remove-punct', action='store_true')
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
 
     pairs = read_csv(args.input_file)
-    dicts = [read_dict(dictionary) for dictionary in args.dicts]
+    dicts = [read_dict(dictionary, ipa=args.ipa) for dictionary in args.dicts]
     foreign_dict = merge_dict(dicts)
     all_ool_words = set()
 
     datas = []
     for wav, (hanji, lomaji) in tqdm.tqdm(pairs.items()):
         text = parse_taigi(hanji, lomaji)
-        text, phn_level_lang_codes, word_level_lang_codes, ool_words = postprocess_text(foreign_dict, text)
-        assert all(map(lambda phn: '@' + phn in SYMBOLS, text.split()))
+        text, phn_level_lang_codes, word_level_lang_codes, ool_words = \
+            postprocess_text(foreign_dict, text, output_type='ipa' if args.ipa else 'arpabet',
+                             remove_punct=args.remove_punct)
+        #assert all(map(lambda phn: '@' + phn in SYMBOLS, text.split()))
         all_ool_words.update(ool_words)
         if args.infer:
-            data = [wav, text, " ".join([str(LANGS[lang_code]) for lang_code in word_level_lang_codes])]
+            data = [wav, text, " ".join(word_level_lang_codes)]
         else:
             data = [wav, SPEAKERS["tai"], STYLES["neutral"], text, " ".join([str(LANGS[lang_code]) for lang_code in phn_level_lang_codes])]
         datas.append(data)
@@ -234,7 +255,7 @@ if __name__ == "__main__":
         attributes = {"speakers": SPEAKERS, "styles": STYLES, "languages": LANGS}
         write_json(output_dir / "attributes.json", attributes)
         symbol_to_id = make_symbol_to_id()
-        write_json(output_dir / "symbols.json", symbol_to_id)
+        #write_json(output_dir / "symbols.json", symbol_to_id)
         write_csv(output_dir / "train.txt", datas)
 
     if args.ool_file:

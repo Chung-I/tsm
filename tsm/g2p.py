@@ -41,11 +41,11 @@ class ToneSandhiG2P:
         pron_as_phns = self.infer_pron(chars, phns, src_word_lengths, src_sandhi_boundaries)
         return " ".join(pron_as_phns)
 
-    def run(self, src_text, phn_text, tgt_tree, tgt_to_src):
+    def run(self, src_text, phn_text, tgt_tree, tgt_to_src, apply_tone_sandhi=True):
         src_tokens = Sentence.parse_mixed_text(src_text)
         src_word_lengths, src_sandhi_boundaries = self.get_src_sandhi_start_and_ends(tgt_tree, src_tokens, tgt_to_src)
         phns = phn_text.split()
-        graphs, phns = self.infer_pron(src_tokens, phns, src_word_lengths, src_sandhi_boundaries)
+        graphs, phns = self.infer_pron(src_tokens, phns, src_word_lengths, src_sandhi_boundaries, apply_tone_sandhi)
         return graphs, phns
 
     def find_boundary_preterminal(self, root, pos, direction="right"):
@@ -154,13 +154,13 @@ class ToneSandhiG2P:
             cut_source_tokens_from_target_tokens_and_obtain_sandhi_boundaries(len(src_tokens), tgt_tree.leaves(), tgt_to_src, tgt_sandhi_boundaries)
         return src_word_lengths, src_sandhi_boundaries
 
-    def infer_pron(self, chars: List[str], phns: List[str], src_word_lengths: List[int], src_sandhi_boundaries: List[bool]) -> List[str]:
+    def infer_pron(self, chars: List[str], phns: List[str], src_word_lengths: List[int], src_sandhi_boundaries: List[bool], apply_tone_sandhi=True) -> List[str]:
         start_and_ends = word_lengths_to_char_start_and_ends(src_word_lengths)
         words = ["-".join(chars[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
         word_phns = ["-".join(phns[start:end]) + sandhi_mark(boundary) for (start, end), boundary in zip(start_and_ends, src_sandhi_boundaries)]
         logger.info(f"grapheme phoneme pairs sent to singhong system: {' '.join(words)}, {' '.join(word_phns)}")
         sent = 拆文分析器.建立句物件(" ".join(words), " ".join(word_phns))
-        tone_sandhi_sent = 台灣話口語講法(sent, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
+        tone_sandhi_sent = 台灣話口語講法(sent, apply_tone_sandhi=apply_tone_sandhi, to_phn=False, to_TLPA=True, phn_delimiter="", add_circumfix_for_non_taigi_words=False)
         graph_text = tone_sandhi_sent.看型("-", " ", " ")
         phn_text = tone_sandhi_sent.看音("-", " ", " ")
         return graph_text.split(), phn_text.split()
